@@ -26,7 +26,7 @@ async function searchWeather() {
 
   showState('loading');
   try {
-    const response = await fetch(`/api/weather?city=${encodeURIComponent(city)}`);
+    const response = await fetch(`https://proiect-web-0tha.onrender.com/api/weather?city=${encodeURIComponent(city)}`);
     if (!response.ok) throw new Error('Orașul nu a fost găsit');
     const data = await response.json();
     
