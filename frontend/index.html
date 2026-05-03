@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>☁️ WeatherBuddy: Prietenul tău meteorologic</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Pacifico&display=swap" rel="stylesheet">
+</head>
+<body class="weather-clear day">
+
+  <div class="bg-scene" id="bgScene">
+    <div class="sun-wrap" id="sunWrap">
+      <div class="sun">
+        <div class="sun-core"></div>
+        <div class="rays" id="rays"></div>
+      </div>
+    </div>
+    
+    <div class="moon-wrap" id="moonWrap">
+      <div class="moon"></div>
+      <div class="stars-field" id="starsField"></div>
+    </div>
+   
+    <div class="clouds-field" id="cloudsField"></div>
+    <div class="rain-field" id="rainField"></div>
+    <div class="snow-field" id="snowField"></div>
+    <div class="thunder-flash" id="thunderFlash"></div>
+  </div>
+
+
+  <div class="app">
+    <header class="header">
+      <div class="logo">
+        <span class="logo-emoji">🌤️</span>
+        <span class="logo-name">WeatherBuddy</span>
+      </div>
+      <div class="xp-widget">
+        <span class="xp-stars">⭐</span>
+        <span class="xp-val" id="xpVal">0</span>
+        <span class="xp-label">XP</span>
+        <div class="xp-track"><div class="xp-bar" id="xpBar"></div></div>
+        <div class="lv-badge" id="lvBadge">Niv. 1</div>
+      </div>
+    </header>
+
+    <div class="body">
+      <aside class="sidebar">
+        <div class="card char-card">
+          <h2 class="card-title">🧍 Prietenul tău</h2>
+          <div class="customize">
+            <div class="cust-row">
+              <label>Nume</label>
+              <input id="charName" type="text" value="Alex" maxlength="12" placeholder="Numele tău..."/>
+            </div>
+            <div class="cust-row">
+              <label>Sex</label>
+              <div class="pill-group">
+                <button class="pill active" id="btnM" onclick="setGender('m')">👦 Băiat</button>
+                <button class="pill" id="btnF" onclick="setGender('f')">👧 Fată</button>
+              </div>
+            </div>
+            <div class="cust-row">
+              <label>Piele</label>
+              <div class="swatch-row">
+                <button id="skinLight" class="swatch active" style="background:#FFDBB4" onclick="setSkin('light')" title="Deschis"></button>
+                <button id="skinMedium" class="swatch" style="background:#C68642" onclick="setSkin('medium')" title="Mediu"></button>
+                <button id="skinDark" class="swatch" style="background:#5C3317" onclick="setSkin('dark')" title="Închis"></button>
+              </div>
+            </div>
+            <div class="cust-row">
+              <label>Păr</label>
+              <div class="swatch-row">
+                <button id="hairBlack" class="swatch" style="background:#1C1008" onclick="setHair('black')" title="Negru"></button>
+                <button id="hairBrown" class="swatch active" style="background:#6B3A2A" onclick="setHair('brown')" title="Maro"></button>
+                <button id="hairBlonde" class="swatch" style="background:#D4A017" onclick="setHair('blonde')" title="Blond"></button>
+                <button id="hairRed" class="swatch" style="background:#B22222" onclick="setHair('red')" title="Roșcat"></button>
+                <button id="hairGray" class="swatch" style="background:#888" onclick="setHair('gray')" title="Gri"></button>
+              </div>
+            </div>
+          </div>
+
+          <div class="char-stage">
+            <div id="charSvg"></div>
+            <div class="char-shadow"></div>
+          </div>
+          <div class="bubble" id="bubble">
+            <p id="bubbleText">Bună! Caută un oraș și îți spun cu ce să te îmbraci! 😊</p>
+          </div>
+
+          <div class="achievements">
+            <h3>🏆 Realizări</h3>
+            <div class="badge-row" id="badgeRow">
+              <div class="achv locked" id="achv_first" title="Prima căutare">🔍</div>
+              <div class="achv locked" id="achv_five" title="5 orașe căutate">🌍</div>
+              <div class="achv locked" id="achv_rain" title="Verificat ploaia">☂️</div>
+              <div class="achv locked" id="achv_sun" title="Zi însorită găsită">☀️</div>
+              <div class="achv locked" id="achv_night" title="Căutare nocturnă">🌙</div>
+              <div class="achv locked" id="achv_snow" title="Ninsoare descoperită">❄️</div>
+              <div class="achv locked" id="achv_wind" title="Vânt puternic">🌬️</div>
+              <div class="achv locked" id="achv_explorer" title="Explorator: 10 orașe">🗺️</div>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <main class="main">
+        <div class="card search-card">
+          <div class="search-row">
+            <span class="search-pin">📍</span>
+            <input id="cityInput" type="text" placeholder="Caută un oraș din lume... (ex: București, Paris, Tokyo)"
+                   onkeydown="if(event.key==='Enter') searchWeather()"/>
+            <button class="btn-search" onclick="searchWeather()">🔎 Caută</button>
+          </div>
+          <div class="recent-row" id="recentRow">
+            <span class="recent-lbl">🕐 Recente:</span>
+            <div id="chips"></div>
+          </div>
+        </div>
+
+        <div class="unit-row">
+          <button class="unit-btn active" id="unitC" onclick="setUnit('C')">°C Celsius</button>
+          <button class="unit-btn" id="unitF" onclick="setUnit('F')">°F Fahrenheit</button>
+          <button class="unit-btn" id="unitK" onclick="setUnit('K')">K Kelvin</button>
+        </div>
+        <div class="card state-card" id="emptyCard">
+          <div class="state-icon">🌍</div>
+          <p>Caută un oraș pentru a vedea <strong>vremea în timp real</strong><br/>și sfaturile prietenului tău!</p>
+        </div>
+        <div class="card state-card" id="loadCard" style="display:none">
+          <div class="spinner"></div>
+          <p>Se încarcă datele meteorologice...</p>
+        </div>
+        <div class="card state-card" id="errCard" style="display:none">
+          <div class="state-icon">😕</div>
+          <p id="errMsg">Orașul nu a fost găsit.</p>
+        </div>
+        <div id="weatherCard" style="display:none">
+
+          <div class="card city-card">
+            <div class="city-row">
+              <div>
+                <h1 class="city-name" id="cityName">—</h1>
+                <div class="city-sub" id="cityCountry">—</div>
+              </div>
+              <div class="time-box">
+                <div class="time-label">🕐 Ora locală</div>
+                <div class="time-val" id="localTime">—:—</div>
+              </div>
+            </div>
+
+            <div class="weather-hero">
+              <div class="w-icon" id="wIcon">☀️</div>
+              <div class="temp-block">
+                <div class="temp-big" id="tempBig">—</div>
+                <div class="temp-others" id="tempOthers"></div>
+                <div class="w-desc" id="wDesc">—</div>
+              </div>
+            </div>
+
+            <div class="verdict" id="verdict">—</div>
+          </div>
+
+          <div class="details-grid">
+            <div class="card det-card">
+              <span class="det-ico">💧</span>
+              <span class="det-lbl">Umiditate</span>
+              <span class="det-val" id="dHumidity">—</span>
+            </div>
+            <div class="card det-card">
+              <span class="det-ico">💨</span>
+              <span class="det-lbl">Vânt</span>
+              <span class="det-val" id="dWind">—</span>
+            </div>
+            <div class="card det-card">
+              <span class="det-ico">🌡️</span>
+              <span class="det-lbl">Se simte ca</span>
+              <span class="det-val" id="dFeels">—</span>
+            </div>
+            <div class="card det-card">
+              <span class="det-ico">🌅</span>
+              <span class="det-lbl">Răsărit</span>
+              <span class="det-val" id="dSunrise">—</span>
+            </div>
+            <div class="card det-card">
+              <span class="det-ico">🌇</span>
+              <span class="det-lbl">Apus</span>
+              <span class="det-val" id="dSunset">—</span>
+            </div>
+            <div class="card det-card">
+              <span class="det-ico">👁️</span>
+              <span class="det-lbl">Vizibilitate</span>
+              <span class="det-val" id="dVis">—</span>
+            </div>
+          </div>
+
+          <div class="card advice-card" id="adviceCard">
+            <div class="advice-ico" id="advIco">👔</div>
+            <div class="advice-body">
+              <div class="advice-title">Sfatul prietenului tău:</div>
+              <div class="advice-text" id="advText">—</div>
+            </div>
+          </div>
+
+        </div>
+
+      </main>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+  <script src="weather.js"></script>
+  <script src="character.js"></script>
+  <script src="background.js"></script>
+  <script src="gamification.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

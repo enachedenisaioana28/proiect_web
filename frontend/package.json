@@ -1,0 +1,15 @@
+{
+  "name": "weatherbuddy-frontend",
+  "version": "1.0.0",
+  "description": "WeatherBuddy-Frontend-Proiect 11",
+  "main": "app.js",
+  "scripts": {
+    "start": "echo 'Frontend is ready to serve on http://localhost:3000'",
+    "dev": "echo 'Frontend is ready to serve on http://localhost:3000'"
+  },
+  "keywords": ["weather", "game", "frontend"],
+  "author": "Echipa Proiect 11",
+  "license": "ISC",
+  "dependencies": {},
+  "devDependencies": {}
+}
