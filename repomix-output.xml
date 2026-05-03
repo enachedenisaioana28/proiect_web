@@ -1,0 +1,2207 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+backend/.env
+backend/middleware/errorHandler.js
+backend/middleware/logger.js
+backend/package.json
+backend/routes/history.js
+backend/routes/stats.js
+backend/routes/weather.js
+backend/server.js
+backend/services/historyService.js
+backend/services/weatherService.js
+backend/weather.test.js
+frontend/app.js
+frontend/background.js
+frontend/character.js
+frontend/gamification.js
+frontend/index.html
+frontend/package.json
+frontend/style.css
+README.MD
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="backend/.env">
+OPENWEATHER_API_KEY=8565b1a3ac0548dc03fc6ae7ca7f199d
+PORT=5000
+</file>
+
+<file path="backend/middleware/errorHandler.js">
+'use strict';
+
+function errorHandler(err, req, res, next) {
+  console.error(`\x1b[31m[EROARE]\x1b[0m ${err.message}`);
+  if (process.env.NODE_ENV === 'development') {
+    console.error(err.stack);
+  }
+  const status = err.status || 500;
+  res.status(status).json({
+    success: false,
+    error  : err.message || 'Eroare internă de server.',
+    ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
+  });
+}
+module.exports = errorHandler;
+</file>
+
+<file path="backend/middleware/logger.js">
+'use strict';
+
+function logger(req, res, next) {
+  const start = Date.now();
+  res.on('finish', () => {
+    const ms     = Date.now() - start;
+    const status = res.statusCode;
+    const color  = status >= 500 ? '\x1b[31m'   
+    : status >= 400 ? '\x1b[33m' 
+    : status >= 300 ? '\x1b[36m'
+    : '\x1b[32m';
+    const reset  = '\x1b[0m';
+
+    console.log(
+      `${color}[${new Date().toLocaleTimeString('ro-RO')}]${reset}` +
+      ` ${req.method.padEnd(6)} ${req.originalUrl.padEnd(35)}` +
+      ` ${color}${status}${reset}  ${ms}ms`
+    );
+  });
+
+  next();
+}
+module.exports = logger;
+</file>
+
+<file path="backend/package.json">
+{
+  "name": "weatherbuddy-backend",
+  "version": "1.0.0",
+  "description": "WeatherBuddy- Backend Node.js/Express",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "test": "jest --verbose"
+  },
+  "keywords": ["weather", "openweathermap", "nodejs", "express"],
+  "author": "Cornea Anuca, Cozma Delia, Enache Denisa",
+  "license": "ISC",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.0.3",
+    "express": "^4.18.2",
+    "node-fetch": "^2.7.0"
+  },
+  "devDependencies": {
+    "jest": "^29.0.0",
+    "supertest": "^6.3.0"
+  },
+  "jest": {
+    "testEnvironment": "node"
+  }
+}
+</file>
+
+<file path="backend/routes/history.js">
+'use strict';
+
+const express = require('express');
+const router = express.Router();
+const historyService = require('../services/historyService');
+router.get('/', async (req, res, next) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit) || 20, 100);
+    const data  = await historyService.getHistory(limit);
+    res.json({ success: true, ...data });
+  } catch (err) {
+    next(err);
+  }
+});
+router.get('/recent', async (req, res, next) => {
+  try {
+    const cities = await historyService.getRecentCities(5);
+    res.json({ success: true, cities });
+  } catch (err) {
+    next(err);
+  }
+});
+router.delete('/', async (req, res, next) => {
+  try {
+    await historyService.clearHistory();
+    res.json({ success: true, message: 'Istoricul a fost șters.' });
+  } catch (err) {
+    next(err);
+  }
+});
+module.exports = router;
+</file>
+
+<file path="backend/routes/stats.js">
+'use strict';
+
+const express = require('express');
+const router = express.Router();
+const historyService = require('../services/historyService');
+router.get('/', async (req, res, next) => {
+  try {
+    const stats = await historyService.getStats();
+    res.json({ success: true, stats });
+  } catch (err) {
+    next(err);
+  }
+});
+module.exports = router;
+</file>
+
+<file path="backend/routes/weather.js">
+const express = require('express');
+const router = express.Router();
+const WeatherService = require('../services/weatherService');
+router.get('/', async (req, res, next) => {
+  try {
+    const { city } = req.query;
+
+    if (!city) {
+      return res.status(400).json({
+        error: 'Missing parameter',
+        message: 'Parameter "city" is required. Example: /api/weather?city=Iași',
+      });
+    }
+
+    const weather = await WeatherService.getWeather(city);
+    res.json(weather);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/convert', (req, res) => {
+  try {
+    const { temp, unit = 'C' } = req.query;
+
+    if (temp === undefined) {
+      return res.status(400).json({
+        error: 'Parametrul lipeste',
+        message: 'Parametrul "temp" e obligatoriu. Optional: unit (C|F|K), C',
+      });
+    }
+
+    const tempNum = parseFloat(temp);
+    if (isNaN(tempNum)) {
+      return res.status(400).json({ error: 'Invalid temperature value' });
+    }
+
+    const converted = WeatherService.convertTemp(tempNum, unit);
+    const suffix = WeatherService.unitSuffix(unit);
+
+    res.json({
+      original: `${tempNum}°C`,
+      converted: `${converted}${suffix}`,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+module.exports = router;
+</file>
+
+<file path="backend/server.js">
+'use strict';
+require('dotenv').config();
+
+const express = require('express');
+const cors = require('cors');
+const path = require('path');
+
+
+const weatherRoutes  = require('./routes/weather');
+const historyRoutes  = require('./routes/history');
+const statsRoutes    = require('./routes/stats');
+
+const logger     = require('./middleware/logger');
+const errorHandler = require('./middleware/errorHandler');
+
+const app  = express();
+const PORT = process.env.PORT || 5000;
+
+
+app.use(express.json());
+app.use(express.static(path.join(__dirname, '../frontend')));
+app.use(logger);
+
+app.get('/api/health', (req, res) => {
+  res.json({
+    status : 'OK',
+    server : 'WeatherBuddy Backend',
+    version: '1.0.0',
+    port   : PORT,
+    time   : new Date().toISOString(),
+  });
+});
+
+
+app.use('/api/weather', weatherRoutes);
+app.use('/api/history', historyRoutes);
+app.use('/api/stats', statsRoutes);
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../frontend/index.html'));
+});
+
+app.use(errorHandler);
+const server = app.listen(PORT, () => {
+  console.log('');
+  console.log(`http://localhost:${PORT}`);
+  console.log('');
+});
+module.exports = { app, server };
+</file>
+
+<file path="backend/services/historyService.js">
+'use strict';
+
+const fs   = require('fs').promises;
+const path = require('path');
+
+const DATA_FILE  = path.join(__dirname, '..', 'data', 'history.json');
+const MAX_RECORDS = 100; 
+
+async function readHistory() {
+  try {
+    const raw = await fs.readFile(DATA_FILE, 'utf-8');
+    return JSON.parse(raw);
+  } catch {
+    return { searches: [], totalCount: 0 };
+  }
+}
+
+async function writeHistory(data) {
+  await fs.mkdir(path.dirname(DATA_FILE), { recursive: true });
+  await fs.writeFile(DATA_FILE, JSON.stringify(data, null, 2), 'utf-8');
+}
+
+async function addSearch({ city, country, tempC, weatherMain, unit }) {
+  const db = await readHistory();
+
+  const entry = {
+    id         : Date.now(),
+    city,
+    country,
+    tempC,
+    weatherMain,
+    unit,
+    searchedAt : new Date().toISOString(),
+  };
+
+  db.searches.unshift(entry);  
+  db.totalCount++;
+
+  if (db.searches.length > MAX_RECORDS) {
+    db.searches = db.searches.slice(0, MAX_RECORDS);
+  }
+
+  await writeHistory(db);
+  return entry;
+}
+
+async function getHistory(limit = 20) {
+  const db = await readHistory();
+  return {
+    searches  : db.searches.slice(0, limit),
+    totalCount: db.totalCount,
+  };
+}
+
+async function getRecentCities(limit = 5) {
+  const db   = await readHistory();
+  const seen = new Set();
+  const cities = [];
+
+  for (const s of db.searches) {
+    const key = s.city.toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      cities.push(s.city);
+      if (cities.length >= limit) break;
+    }
+  }
+  return cities;
+}
+
+async function getStats() {
+  const db = await readHistory();
+  const { searches } = db;
+
+  if (searches.length === 0) {
+    return { totalSearches: 0, uniqueCities: 0, topCities: [], weatherBreakdown: {} };
+  }
+
+
+  const cityMap = {};
+  const weatherMap = {};
+
+  searches.forEach(s => {
+    const key = s.city.toLowerCase();
+    cityMap[key] = (cityMap[key] || 0) + 1;
+    weatherMap[s.weatherMain] = (weatherMap[s.weatherMain] || 0) + 1;
+  });
+
+
+  const topCities = Object.entries(cityMap)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([city, count]) => ({ city, count }));
+
+  return {
+    totalSearches   : db.totalCount,
+    recordsInFile   : searches.length,
+    uniqueCities    : Object.keys(cityMap).length,
+    topCities,
+    weatherBreakdown: weatherMap,
+    lastSearchAt    : searches[0]?.searchedAt || null,
+  };
+}
+
+async function clearHistory() {
+  await writeHistory({ searches: [], totalCount: 0 });
+}
+
+module.exports = { addSearch, getHistory, getRecentCities, getStats, clearHistory };
+</file>
+
+<file path="backend/services/weatherService.js">
+'use strict';
+
+const fetch = require('node-fetch');
+const API_KEY = process.env.OPENWEATHER_API_KEY;
+const BASE    = process.env.OWM_BASE_URL || 'https://api.openweathermap.org/data/2.5';
+
+const COMPASS_RO = [
+  'Nord','Nord-Nord-Est','Nord-Est','Est-Nord-Est',
+  'Est','Est-Sud-Est','Sud-Est','Sud-Sud-Est',
+  'Sud','Sud-Sud-Vest','Sud-Vest','Vest-Sud-Vest',
+  'Vest','Vest-Nord-Vest','Nord-Vest','Nord-Nord-Vest',
+];
+
+async function fetchCurrentWeather(city) {
+  if (!API_KEY) throw new Error('OPENWEATHER_API_KEY lipsește din .env');
+  const url = `${BASE}/weather?q=${encodeURIComponent(city)}&appid=${API_KEY}&units=metric&lang=ro`;
+  const res = await fetch(url);
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    if (res.status === 404)
+      throw Object.assign(new Error(`Orașul "${city}" nu a fost găsit.`), { status: 404 });
+    if (res.status === 401)
+      throw Object.assign(new Error('Cheie API OpenWeatherMap invalidă.'), { status: 401 });
+    throw Object.assign(new Error(body.message || `Eroare API (${res.status})`), { status: res.status });
+  }
+
+  return res.json();
+}
+
+function processWeatherData(raw) {
+  const { main, weather, wind, sys, timezone, name, visibility, clouds } = raw;
+  const wInfo = weather[0];
+
+  const tempC  = parseFloat(main.temp.toFixed(1));
+  const feelsC = parseFloat(main.feels_like.toFixed(1))
+  const nowUnix = Math.floor(Date.now() / 1000);
+  const isNight = nowUnix < sys.sunrise || nowUnix > sys.sunset;
+
+  return {
+    city        : name,
+    country     : sys.country,
+    coords      : { lat: raw.coord.lat, lon: raw.coord.lon },
+
+    tempC,
+    tempF       : parseFloat((tempC * 9/5 + 32).toFixed(1)),
+    tempK       : parseFloat((tempC + 273.15).toFixed(2)),
+    feelsC,
+    feelsF      : parseFloat((feelsC * 9/5 + 32).toFixed(1)),
+    feelsK      : parseFloat((feelsC + 273.15).toFixed(2)),
+    minC        : parseFloat(main.temp_min.toFixed(1)),
+    maxC        : parseFloat(main.temp_max.toFixed(1)),
+
+    humidity    : main.humidity,
+    pressure    : main.pressure,
+    description : wInfo.description,
+    weatherMain : wInfo.main,
+    weatherId   : wInfo.id,
+    iconCode    : wInfo.icon,
+    iconUrl     : `https://openweathermap.org/img/wn/${wInfo.icon}@2x.png`,
+    cloudiness  : clouds?.all ?? null,
+    visibility  : visibility ? parseFloat((visibility / 1000).toFixed(1)) : null,
+
+  
+    windSpeed   : wind.speed,
+    windDeg     : wind.deg,
+    windDir     : degToCompass(wind.deg),
+    windGust    : wind.gust ?? null,
+
+   
+    sunrise     : unixToHHMM(sys.sunrise, timezone),
+    sunset      : unixToHHMM(sys.sunset,  timezone),
+    sunriseUnix : sys.sunrise,
+    sunsetUnix  : sys.sunset,
+
+   
+    localTime   : getLocalTime(timezone),
+    timezone,
+    isNight,
+
+    
+    fetchedAt   : new Date().toISOString(),
+  };
+}
+
+function buildAdvice(data) {
+  const { tempC, weatherMain, humidity, isNight, windSpeed } = data;
+  const isRain  = ['Rain', 'Drizzle', 'Thunderstorm'].includes(weatherMain);
+  const isSnow  = weatherMain === 'Snow';
+  const isWindy = windSpeed > 8;
+
+  const items = [];
+  let outfit = 'normal', needUmbrella = false, needCoat = false;
+
+  if (tempC >= 30) {
+    items.push('Arșiță! Tricou lejer și pantaloni scurți sunt suficienți.');
+    outfit = 'summer';
+  } else if (tempC >= 22) {
+    items.push('Temperatură plăcută! Un tricou e perfect.');
+    outfit = 'light';
+  } else if (tempC >= 14) {
+    items.push('Puțin răcoros! Ia o jachetă sau un hanorac.');
+    outfit = 'jacket'; needCoat = true;
+  } else if (tempC >= 4) {
+    items.push('Frig afară! Haină, fular și mănuși sunt recomandate.');
+    outfit = 'winter'; needCoat = true;
+  } else {
+    items.push('Ger serios! Haină groasă, căciulă, fular și mănuși obligatoriu!');
+    outfit = 'heavy-winter'; needCoat = true;
+  }
+
+  if (isRain)  { items.push('Ia umbrela, plouă!'); needUmbrella = true; }
+  if (isSnow)  { items.push('Ninge, ai grijă pe gheață!'); needCoat = true; }
+  if (isWindy) { items.push('Vânt puternic, jachetă rezistentă la vânt.'); }
+  if (humidity > 80 && !isRain) items.push('Umiditate ridicată, poate părea mai cald decât este.');
+  if (isNight) items.push('E noapte acolo, temperaturile au scăzut!');
+
+  return { text: items.join(' '), outfit, needCoat, needUmbrella };
+}
+
+function buildVerdict(data) {
+  const { tempC, weatherMain, humidity, isNight } = data;
+  if (isNight && weatherMain === 'Clear') 
+    return 'Noapte senină, cer plin de stele!';
+  if (isNight)                        
+    return 'Noapte afară, lumea doarme deja!';
+  if (weatherMain === 'Thunderstorm')     
+    return 'Furtună puternică! Stai în interior!';
+  if (weatherMain === 'Snow')             
+    return 'Ninge frumos, zi de om de zăpadă!';
+  if (weatherMain === 'Rain')             
+    return 'Zi ploioasă, perfectă pentru o carte bună acasă!';
+  if (weatherMain === 'Drizzle')          
+    return 'Burniță ușoară, ia umbrela totuși!';
+  if (weatherMain === 'Clouds' && tempC >= 18) 
+    return 'Zi înnorată dar agreabilă!';
+  if (weatherMain === 'Clouds')           
+    return 'Cer acoperit și răcoare.';
+  if (['Mist','Fog','Haze'].includes(weatherMain)) 
+    return 'Ceață, condu cu grijă!';
+  if (weatherMain === 'Clear' && tempC >= 25 && humidity < 65)
+    return 'Zi splendidă! Soare, căldură, perfecțiune!';
+  if (weatherMain === 'Clear' && tempC >= 18) 
+    return 'Zi frumoasă și însorită!';
+  if (weatherMain === 'Clear' && tempC < 10)  
+    return 'Cer senin dar frig, îmbracă-te bine!';
+  return 'O zi obișnuită, verifică detaliile!';
+}
+
+function degToCompass(deg) {
+  if (deg === undefined || deg === null) return 'Necunoscut';
+  return COMPASS_RO[Math.round(deg / 22.5) % 16];
+}
+
+function unixToHHMM(unix, tzOffset) {
+  const d = new Date((unix + tzOffset) * 1000);
+  return `${String(d.getUTCHours()).padStart(2,'0')}:${String(d.getUTCMinutes()).padStart(2,'0')}`;
+}
+
+function getLocalTime(tzOffset) {
+  const utcMs = Date.now() + new Date().getTimezoneOffset() * 60000;
+  const d = new Date(utcMs + tzOffset * 1000);
+  return `${String(d.getUTCHours()).padStart(2,'0')}:${String(d.getUTCMinutes()).padStart(2,'0')}`;
+}
+
+const WeatherService = {
+    getWeather: async function(city) {
+        const raw  = await fetchCurrentWeather(city);
+        const data = processWeatherData(raw);
+        return {
+            ...data,
+            advice : buildAdvice(data),
+            verdict: buildVerdict(data),
+        };
+    }
+};
+
+module.exports = WeatherService;
+</file>
+
+<file path="backend/weather.test.js">
+'use strict';
+
+require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
+const request        = require('supertest');
+const { app, server } = require('../server');
+const { degToCompass, buildAdvice, buildVerdict, processWeatherData } =
+  require('../services/weatherService');
+describe('degToCompass() – Conversie grade → direcție vânt', () => {
+  test('0° → Nord', ()      => expect(degToCompass(0)).toBe('Nord'));
+  test('90° → Est', ()      => expect(degToCompass(90)).toBe('Est'));
+  test('180° → Sud', ()     => expect(degToCompass(180)).toBe('Sud'));
+  test('270° → Vest', ()    => expect(degToCompass(270)).toBe('Vest'));
+  test('45° → Nord-Est', () => expect(degToCompass(45)).toBe('Nord-Est'));
+  test('225° → Sud-Vest', ()=> expect(degToCompass(225)).toBe('Sud-Vest'));
+  test('undefined → Necunoscut', () => expect(degToCompass(undefined)).toBe('Necunoscut'));
+});
+describe('buildAdvice() – Sfaturi îmbrăcăminte', () => {
+  const base = { humidity: 50, isNight: false, windSpeed: 3 };
+  test('Temperatură 32°C → outfit summer', () => {
+    const adv = buildAdvice({ ...base, tempC: 32, weatherMain: 'Clear' });
+    expect(adv.outfit).toBe('summer');
+    expect(adv.needCoat).toBe(false);
+  });
+
+  test('Temperatură -5°C → heavy-winter + haină', () => {
+    const adv = buildAdvice({ ...base, tempC: -5, weatherMain: 'Snow' });
+    expect(adv.outfit).toBe('heavy-winter');
+    expect(adv.needCoat).toBe(true);
+  });
+
+  test('Ploaie → needUmbrella true', () => {
+    const adv = buildAdvice({ ...base, tempC: 15, weatherMain: 'Rain' });
+    expect(adv.needUmbrella).toBe(true);
+  });
+
+  test('Vânt puternic → menționat în text', () => {
+    const adv = buildAdvice({ ...base, tempC: 18, weatherMain: 'Clear', windSpeed: 12 });
+    expect(adv.text).toMatch(/vânt/i);
+  });
+
+  test('Umiditate >80% → menționat în text', () => {
+    const adv = buildAdvice({ ...base, tempC: 25, weatherMain: 'Clear', humidity: 85 });
+    expect(adv.text).toMatch(/umiditate/i);
+  });
+});
+
+describe('buildVerdict(): Descriere tip zi', () => {
+  const base = { humidity: 50, isNight: false };
+
+  test('Senin 25°C umiditate 55% → splendidă', () => {
+    const v = buildVerdict({ ...base, tempC: 25, weatherMain: 'Clear', humidity: 55 });
+    expect(v.toLowerCase()).toContain('splendid');
+  });
+
+  test('Noapte senin → stele', () => {
+    const v = buildVerdict({ ...base, tempC: 15, weatherMain: 'Clear', isNight: true });
+    expect(v.toLowerCase()).toContain('noapte');
+  });
+
+  test('Furtună → stai în interior', () => {
+    const v = buildVerdict({ ...base, tempC: 18, weatherMain: 'Thunderstorm' });
+    expect(v.toLowerCase()).toContain('furtun');
+  });
+
+  test('Ninsoare → om de zăpadă', () => {
+    const v = buildVerdict({ ...base, tempC: -2, weatherMain: 'Snow' });
+    expect(v.toLowerCase()).toContain('ninge');
+  });
+});
+
+describe('GET /api/health', () => {
+  test('Returnează status OK și portul', async () => {
+    const res = await request(app).get('/api/health');
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('OK');
+    expect(res.body.server).toBe('WeatherBuddy Backend');
+  });
+});
+
+describe('GET /api/weather', () => {
+  test('Fără parametru city → 400', async () => {
+    const res = await request(app).get('/api/weather');
+    expect(res.status).toBe(400);
+    expect(res.body.success).toBe(false);
+  });
+
+  test('City cu un singur caracter → 400', async () => {
+    const res = await request(app).get('/api/weather?city=X');
+    expect(res.status).toBe(400);
+    expect(res.body.success).toBe(false);
+  });
+
+  test('Unit invalid → 400', async () => {
+    const res = await request(app).get('/api/weather?city=Paris&unit=Z');
+    expect(res.status).toBe(400);
+    expect(res.body.success).toBe(false);
+  });
+
+  test('Oraș real (București) → 200 cu date valide', async () => {
+    const res = await request(app).get('/api/weather?city=Bucharest&unit=C');
+    expect([200, 401, 404]).toContain(res.status);
+    if (res.status === 200) {
+      expect(res.body.success).toBe(true);
+      expect(res.body.data).toHaveProperty('tempC');
+      expect(res.body.data).toHaveProperty('humidity');
+      expect(res.body.data).toHaveProperty('windDir');
+      expect(res.body.data.tempDisplay).toHaveProperty('allUnits');
+    }
+  }, 10000); 
+
+  test('Oraș inexistent → 404', async () => {
+    const res = await request(app).get('/api/weather?city=OrasulInexistentXXX999');
+    expect([404, 401]).toContain(res.status);
+  }, 10000);
+});
+
+describe('GET /api/history', () => {
+  test('Returnează liste de căutări', async () => {
+    const res = await request(app).get('/api/history');
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(Array.isArray(res.body.searches)).toBe(true);
+  });
+});
+
+describe('GET /api/history/recent', () => {
+  test('Returnează maxim 5 orașe', async () => {
+    const res = await request(app).get('/api/history/recent');
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body.cities)).toBe(true);
+    expect(res.body.cities.length).toBeLessThanOrEqual(5);
+  });
+});
+
+describe('GET /api/stats', () => {
+  test('Returnează statistici cu câmpuri obligatorii', async () => {
+    const res = await request(app).get('/api/stats');
+    expect(res.status).toBe(200);
+    expect(res.body.stats).toHaveProperty('totalSearches');
+    expect(res.body.stats).toHaveProperty('uniqueCities');
+    expect(res.body.stats).toHaveProperty('topCities');
+  });
+});
+afterAll(done => {
+  server.close(done);
+});
+</file>
+
+<file path="frontend/app.js">
+const AppState = {
+  unit          : 'C',
+  lastWeather   : null,
+  recentCities  : JSON.parse(localStorage.getItem('wb_recent') || '[]'),
+};
+
+const WeatherHelper = {
+    unitSuffix: (u) => u === 'C' ? '°C' : (u === 'F' ? '°F' : ' K'),
+    
+    convertTemp: (c, u) => {
+        if (u === 'F') return parseFloat((c * 9/5 + 32).toFixed(1));
+        if (u === 'K') return parseFloat((c + 273.15).toFixed(2));
+        return c;
+    },
+
+    calculateTime: (timezoneOffsetInSeconds) => {
+        const acum = new Date();
+        const utcMs = acum.getTime() + (acum.getTimezoneOffset() * 60000);
+        const oraOras = new Date(utcMs + (timezoneOffsetInSeconds * 1000));
+        const h = String(oraOras.getHours()).padStart(2, '0');
+        const m = String(oraOras.getMinutes()).padStart(2, '0');
+        return `${h}:${m}`;
+    }
+};
+
+async function searchWeather() {
+  const input = document.getElementById('cityInput');
+  const city  = input?.value?.trim();
+  
+  if (!city) {
+    if (typeof Gamification !== 'undefined') Gamification.showToast('⚠️ Introdu numele unui oraș!');
+    else alert('⚠️ Introdu numele unui oraș!');
+    return;
+  }
+  showState('loading');
+
+  try {
+    const response = await fetch(`/api/weather?city=${encodeURIComponent(city)}`);
+    
+    if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Orașul nu a fost găsit');
+    }
+
+    const data = await response.json();
+    AppState.lastWeather = data;
+    saveRecentCity(data.city);
+
+    if (typeof Background !== 'undefined') Background.update(data.weatherMain, data.isNight);
+    if (typeof Character !== 'undefined') Character.updateForWeather(data);
+    if (typeof Gamification !== 'undefined') Gamification.recordSearch(data);
+
+    renderWeather(data);
+    showState('weather');
+
+  } catch (err) {
+    showState('error');
+    const errEl = document.getElementById('errMsg');
+    if (errEl) errEl.textContent = err.message;
+    console.error('[WeatherBuddy] Eroare:', err);
+  }
+}
+function renderWeather(data) {
+  const u = AppState.unit;
+  const suf = WeatherHelper.unitSuffix(u);
+  const conv = (c) => WeatherHelper.convertTemp(c, u);
+  const oraExacta = WeatherHelper.calculateTime(data.timezone);
+
+  setText('cityName',   `${data.city}, ${data.country}`);
+  setText('cityCountry', `UTC${data.timezone >= 0 ? '+' : ''}${data.timezone/3600}`);
+  setText('localTime',  oraExacta);
+  setText('tempBig', `${conv(data.tempC)}${suf}`);
+  
+  const alts = [];
+  if (u !== 'C') alts.push(`${data.tempC}°C`);
+  if (u !== 'F') alts.push(`${data.tempF}°F`);
+  if (u !== 'K') alts.push(`${data.tempK} K`);
+  setText('tempOthers', alts.join('  ·  '));
+
+  setText('wIcon',  data.emoji || '🌤️');
+  setText('wDesc',  data.description);
+  setText('verdict', data.verdict);
+
+  setText('dHumidity', `${data.humidity}%`);
+  setText('dWind',     `${data.windSpeed} m/s · ${data.windDir}`);
+  setText('dFeels',    `${conv(data.feelsC)}${suf}`);
+  setText('dSunrise',  data.sunrise);
+  setText('dSunset',   data.sunset);
+  setText('dVis',      data.visibility !== null ? `${data.visibility} km` : 'N/D');
+  if (data.advice) {
+    setText('advIco',  data.advice.icon || '🧥');
+    setText('advText', data.advice.text);
+  }
+}
+function setUnit(unit) {
+  AppState.unit = unit;
+  ['C','F','K'].forEach(u => {
+    const btn = document.getElementById(`unit${u}`);
+    if (btn) btn.classList.toggle('active', u === unit);
+  });
+  if (AppState.lastWeather) renderWeather(AppState.lastWeather);
+}
+function saveRecentCity(city) {
+  let cities = AppState.recentCities.filter(c => c.toLowerCase() !== city.toLowerCase());
+  cities.unshift(city);
+  if (cities.length > 5) cities = cities.slice(0, 5);
+  AppState.recentCities = cities;
+  localStorage.setItem('wb_recent', JSON.stringify(cities));
+  renderChips();
+}
+
+function renderChips() {
+  const container = document.getElementById('chips');
+  const row       = document.getElementById('recentRow');
+  if (!container) return;
+  container.innerHTML = '';
+
+  if (AppState.recentCities.length === 0) {
+    if (row) row.style.display = 'none';
+    return;
+  }
+  if (row) row.style.display = 'flex';
+
+  AppState.recentCities.forEach(city => {
+    const chip = document.createElement('button');
+    chip.className = 'chip';
+    chip.textContent = city;
+    chip.onclick = () => {
+      const input = document.getElementById('cityInput');
+      if (input) input.value = city;
+      searchWeather();
+    };
+    container.appendChild(chip);
+  });
+}
+function showState(state) {
+  const ids = { empty:'emptyCard', loading:'loadCard', error:'errCard', weather:'weatherCard' };
+  Object.entries(ids).forEach(([key, id]) => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = (key === state) ? '' : 'none';
+  });
+}
+
+function setText(id, val) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = val;
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  renderChips();
+
+  const input = document.getElementById('cityInput');
+  if (input) {
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') searchWeather();
+    });
+  }
+  setInterval(() => {
+    if (!AppState.lastWeather) return;
+    const currentOra = WeatherHelper.calculateTime(AppState.lastWeather.timezone);
+    setText('localTime', currentOra);
+  }, 30000);
+
+  showState('empty');
+
+  if (typeof Background !== 'undefined') {
+      Background.update('Clear', false);
+  }
+  console.log('[WeatherBuddy] Sistem orar sincronizat! 🌤️');
+});
+</file>
+
+<file path="frontend/background.js">
+const Background = (() => {
+  let current = { main: '', isNight: false };
+  let intervals = [];
+  function setTheme(weatherMain, isNight) {
+    const body = document.body;
+
+    body.classList.remove(
+      'weather-clear','weather-clouds','weather-rain','weather-drizzle',
+      'weather-thunderstorm','weather-snow','weather-mist','weather-haze',
+      'weather-fog','day','night'
+    );
+
+    const cls = weatherMain.toLowerCase();
+    body.classList.add(`weather-${cls}`);
+    body.classList.add(isNight ? 'night' : 'day');
+    current = { main: weatherMain, isNight };
+  }
+  function buildSunRays() {
+    const container = document.getElementById('rays');
+    if (!container) return;
+    container.innerHTML = '';
+    const rayCount = 12;
+    for (let i = 0; i < rayCount; i++) {
+      const ray = document.createElement('div');
+      ray.className = 'ray';
+      const angle  = (i / rayCount) * 360;
+      const length = 28 + Math.random() * 20;
+      const dist   = 48;
+      ray.style.cssText = `
+        height:${length}px;
+        transform: rotate(${angle}deg) translateY(-${dist}px);
+        opacity: ${0.5 + Math.random() * 0.5};
+      `;
+      container.appendChild(ray);
+    }
+  }
+  function buildStars() {
+    const field = document.getElementById('starsField');
+    if (!field) return;
+    field.innerHTML = '';
+    for (let i = 0; i < 80; i++) {
+      const s = document.createElement('div');
+      s.className = 'star';
+      const size = 1 + Math.random() * 2.5;
+      s.style.cssText = `
+        width:${size}px; height:${size}px;
+        left:${Math.random()*100}vw;
+        top:${Math.random()*60}vh;
+        --dur:${1.5 + Math.random()*2.5}s;
+        --del:${Math.random()*3}s;
+      `;
+      field.appendChild(s);
+    }
+  }
+
+  function buildClouds(count = 5) {
+    const field = document.getElementById('cloudsField');
+    if (!field) return;
+    field.innerHTML = '';
+    for (let i = 0; i < count; i++) {
+      spawnCloud(field, i * (100 / count));
+    }
+  }
+
+  function spawnCloud(field, startPercent) {
+    const cloud = document.createElement('div');
+    cloud.className = 'cloud';
+    const w = 80 + Math.random() * 120;
+    const h = w * 0.45;
+    const top = 5 + Math.random() * 35;
+    const dur = 25 + Math.random() * 35;
+    const opacity = 0.55 + Math.random() * 0.35;
+    cloud.style.cssText = `
+      width:${w}px; height:${h}px;
+      top:${top}%; opacity:${opacity};
+      left:${startPercent}vw;
+      animation-duration:${dur}s;
+    `;
+    const bump1 = document.createElement('div');
+    bump1.style.cssText = `width:${w*.55}px;height:${h*1.3}px;top:-${h*.3}px;left:${w*.15}px;`;
+    const bump2 = document.createElement('div');
+    bump2.style.cssText = `width:${w*.38}px;height:${h*1.1}px;top:-${h*.1}px;left:${w*.5}px;`;
+    cloud.append(bump1, bump2);
+    field.appendChild(cloud);
+
+    cloud.addEventListener('animationiteration', () => {
+      cloud.style.left = '-250px';
+    });
+  }
+
+  function buildRain(heavy = false) {
+    const field = document.getElementById('rainField');
+    if (!field) return;
+    field.innerHTML = '';
+    const count = heavy ? 180 : 80;
+    for (let i = 0; i < count; i++) {
+      const drop = document.createElement('div');
+      drop.className = 'drop';
+      const h = heavy ? (12 + Math.random()*20) : (8+Math.random()*14);
+      drop.style.cssText = `
+        left:${Math.random()*105}%;
+        top:${-10 - Math.random()*20}%;
+        height:${h}px;
+        opacity:${0.4 + Math.random()*.55};
+        animation-duration:${heavy ? .4+Math.random()*.3 : .6+Math.random()*.5}s;
+        animation-delay:${Math.random()*1.5}s;
+      `;
+      field.appendChild(drop);
+    }
+  }
+  function buildSnow() {
+    const field = document.getElementById('snowField');
+    if (!field) return;
+    field.innerHTML = '';
+    const flakes = ['❄','❅','❆','*','·'];
+    for (let i = 0; i < 60; i++) {
+      const f = document.createElement('div');
+      f.className = 'flake';
+      const size = 10 + Math.random()*16;
+      f.textContent = flakes[Math.floor(Math.random()*flakes.length)];
+      f.style.cssText = `
+        left:${Math.random()*100}%;
+        top:${-10 - Math.random()*20}%;
+        font-size:${size}px;
+        animation-duration:${3+Math.random()*4}s;
+        animation-delay:${Math.random()*4}s;
+      `;
+      field.appendChild(f);
+    }
+  }
+
+  function clearEffects() {
+    ['cloudsField','rainField','snowField'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.innerHTML = '';
+    });
+    const rays = document.getElementById('rays');
+    if (rays) rays.innerHTML = '';
+    const stars = document.getElementById('starsField');
+    if (stars) stars.innerHTML = '';
+    intervals.forEach(clearInterval);
+    intervals = [];
+  }
+
+  function update(weatherMain, isNight) {
+    clearEffects();
+    setTheme(weatherMain, isNight);
+
+    if (isNight) buildStars();
+
+    switch (weatherMain) {
+      case 'Clear':
+        if (!isNight) buildSunRays();
+        if (isNight)  buildStars();
+        buildClouds(1);
+        break;
+
+      case 'Clouds':
+        buildClouds(6);
+        break;
+
+      case 'Drizzle':
+        buildClouds(7);
+        buildRain(false);
+        break;
+
+      case 'Rain':
+        buildClouds(8);
+        buildRain(false);
+        break;
+
+      case 'Thunderstorm':
+        buildClouds(10);
+        buildRain(true);
+        break;
+
+      case 'Snow':
+        buildClouds(4);
+        buildSnow();
+        break;
+
+      case 'Mist':
+      case 'Fog':
+      case 'Haze':
+        buildClouds(12);
+        break;
+
+      default:
+        buildClouds(3);
+    }
+  }
+
+  return { update };
+
+})();
+</file>
+
+<file path="frontend/character.js">
+const Character = (() => {
+
+  let state = {
+    gender  : 'm',
+    skin    : 'light',
+    hair    : 'brown',
+    outfit  : 'normal',
+    isNight : false,
+  };
+
+  const SKIN = {
+    light  : { face:'#FFDBB4', shadow:'#E8B88A', neck:'#F1C27D' },
+    medium : { face:'#cba378', shadow:'#A0672E', neck:'#B57531' },
+    dark   : { face:'#5C3317', shadow:'#3D200D', neck:'#4B2912' },
+  };
+  
+  const HAIR = {
+    black  : '#1C1008',
+    brown  : '#6B3A2A',
+    blonde : '#E9C46A',
+    red    : '#B22222',
+    gray   : '#888888',
+  };
+
+  function buildSVG() {
+    const sk  = SKIN[state.skin]  || SKIN.light;
+    const hr  = HAIR[state.hair]  || HAIR.brown;
+    const isF = state.gender === 'f';
+    const out = state.outfit;
+
+    const clothes = {
+      body  : outfitBodyColor(out),
+      pants : outfitPantsColor(out),
+      acc   : outfitAccessory(out, isF),
+    };
+
+    return `
+<svg class="char-svg" width="140" height="200" viewBox="0 0 140 200" xmlns="http://www.w3.org/2000/svg">
+  <!-- Umbră la picioare -->
+  <ellipse cx="70" cy="190" rx="35" ry="6" fill="rgba(0,0,0,0.1)"/>
+
+  <!-- PICIOARE -->
+  <rect x="48" y="145" width="16" height="42" rx="8" fill="${clothes.pants}" />
+  <rect x="76" y="145" width="16" height="42" rx="8" fill="${clothes.pants}" />
+  <path d="M48,182 h18 q2,0 2,4 t-2,4 h-18 q-4,0 -4,-4 t4,-4z" fill="#333"/>
+  <path d="M76,182 h18 q2,0 2,4 t-2,4 h-18 q-4,0 -4,-4 t4,-4z" fill="#333"/>
+
+  <!-- CORP -->
+  ${buildBody(sk, clothes, isF, out)}
+
+  <!-- ACCESORIU METEO -->
+  ${clothes.acc}
+
+  <!-- CAP -->
+  ${buildHead(sk, hr, isF, out)}
+</svg>`.trim();
+  }
+
+  function buildBody(sk, cl, isF, out) {
+    let body;
+    if (isF) {
+      body = `<path d="M40,152 L100,152 L85,100 L55,100 Z" fill="${cl.body}"/>
+              <path d="M55,100 L70,115 L85,100" fill="rgba(0,0,0,0.05)"/>`;
+    } else {
+      body = `<rect x="40" y="100" width="60" height="52" rx="10" fill="${cl.body}"/>`;
+    }
+
+    const armL = `<rect x="25" y="102" width="15" height="40" rx="7" fill="${cl.body}"/>
+    <circle cx="32.5" cy="142" r="8" fill="${sk.face}"/>`;
+    const armR = `<rect x="100" y="102" width="15" height="40" rx="7" fill="${cl.body}"/>
+   <circle cx="107.5" cy="142" r="8" fill="${sk.face}"/>`;
+
+    const scarf = (out === 'winter' || out === 'heavy-winter') 
+   ? `<path d="M50,95 h40 q5,0 5,8 t-5,8 h-40 q-5,0 -5,-8 t5,-8" fill="#d63031"/>` : '';
+
+    return `<rect x="63" y="90" width="14" height="15" fill="${sk.neck}"/>${armL}${armR}${body}${scarf}`;
+  }
+
+  function buildHead(sk, hr, isF, out) {
+    const faceShape = isF 
+      ? `<path d="M40,65 q0,-30 30,-30 t30,30 q0,25 -30,25 t-30,-25" fill="${sk.face}"/>`
+      : `<rect x="40" y="35" width="60" height="55" rx="25" fill="${sk.face}"/>`;
+
+    const eyes = isF 
+      ? `<!-- Ochi Fată -->
+         <circle cx="58" cy="62" r="4" fill="#333"/>
+         <circle cx="82" cy="62" r="4" fill="#333"/>
+         <path d="M54,58 q2,-4 6,0" fill="none" stroke="#333" stroke-width="1.5"/>
+         <path d="M78,58 q2,-4 6,0" fill="none" stroke="#333" stroke-width="1.5"/>`
+      : `<!-- Ochi Băiat -->
+         <circle cx="58" cy="62" r="3.5" fill="#333"/>
+         <circle cx="82" cy="62" r="3.5" fill="#333"/>`;
+
+    const hair = isF 
+      ? `<!-- Păr Fată -->
+         <path d="M35,65 q0,-40 35,-40 t35,40 v30 q0,5 -5,5 t-5,-5 v-25 h-50 v25 q0,5 -5,5 t-5,-5 z" fill="${hr}"/>`
+      : `<!-- Păr Băiat -->
+         <path d="M40,45 q0,-20 30,-20 t30,20 l5,5 h-70 z" fill="${hr}"/>`;
+
+    const mouth = `<path d="M62,78 q8,5 16,0" fill="none" stroke="#e17055" stroke-width="2" stroke-linecap="round"/>`;
+
+    return `${hair}${faceShape}${eyes}${mouth}`;
+  }
+
+  function outfitAccessory(out, isF) {
+    if (out === 'jacket') {
+      return `<path d="M25,120 L25,150 M15,125 q10,-15 20,0" stroke="#0984e3" stroke-width="3" fill="none"/>`;
+    }
+    if (out === 'summer') {
+      return `<rect x="52" y="58" width="14" height="6" rx="2" fill="rgba(0,0,0,0.6)"/>
+              <rect x="74" y="58" width="14" height="6" rx="2" fill="rgba(0,0,0,0.6)"/>`;
+    }
+    return '';
+  }
+
+  function outfitBodyColor(out) {
+    const map = { summer:'#fab1a0', light:'#81ecec', normal:'#74b9ff', jacket:'#55efc4', winter:'#0984e3', 'heavy-winter':'#2d3436' };
+    return map[out] || '#74b9ff';
+  }
+
+  function outfitPantsColor(out) {
+    return '#2d3436';
+  }
+
+
+  function render() {
+    const el = document.getElementById('charSvg');
+    if (el) el.innerHTML = buildSVG();
+  }
+
+  return {
+    render,
+    setGender: (g) => { state.gender = g; render(); },
+    setSkin: (s) => { state.skin = s; render(); },
+    setHair: (h) => { state.hair = h; render(); },
+    updateForWeather: (data) => {
+      state.outfit = data.advice.outfit;
+      state.isNight = data.isNight;
+      render();
+      const b = document.getElementById('bubbleText');
+      if (b) b.textContent = (data.isNight ? "E noapte, odihnește-te!" : "Uite ce vreme faină!");
+    }
+  };
+})();
+
+function setGender(g) { Character.setGender(g); }
+function setSkin(s) { Character.setSkin(s); }
+function setHair(h) { Character.setHair(h); }
+</file>
+
+<file path="frontend/gamification.js">
+const Gamification = (() => {
+  const XP_PER_SEARCH   = 15;
+  const XP_PER_LEVEL    = 100;
+  const STORAGE_KEY_XP  = 'wb_xp';
+  const STORAGE_KEY_ACH = 'wb_achievements';
+  const STORAGE_KEY_CNT = 'wb_search_count';
+  const ACHIEVEMENTS = {
+    achv_first    : { label:'Prima căutare', xp:20,  check: (s,d) => s >= 1 },
+    achv_five     : { label:'5 orașe diferite', xp:50, check:(s,d) => s >= 5 },
+    achv_rain     : { label:'Prins ploaia!', xp:30, check:(s,d) => ['Rain','Drizzle','Thunderstorm'].includes(d?.weatherMain) },
+    achv_sun      : { label:'Zi splendidă găsită!', xp:30, check:(s,d) => d?.weatherMain==='Clear' && d?.tempC>=20 },
+    achv_night    : { label:'Bufniță de noapte', xp:25, check:(s,d) => d?.isNight },
+    achv_snow     : { label:'Prima ninsoare!', xp:40, check:(s,d) => d?.weatherMain==='Snow' },
+    achv_wind     : { label:'Vântul urlă!', xp:25,  check:(s,d) => d?.windSpeed > 10 },
+    achv_explorer : { label:'Mare explorator', xp:80, check:(s,d) => s >= 10 },
+  };
+
+  
+  let xp       = parseInt(localStorage.getItem(STORAGE_KEY_XP)  || '0', 10);
+  let unlocked = JSON.parse(localStorage.getItem(STORAGE_KEY_ACH) || '[]');
+  let searches = parseInt(localStorage.getItem(STORAGE_KEY_CNT) || '0', 10);
+  function getLevel() { return Math.floor(xp / XP_PER_LEVEL) + 1; }
+  function getXpInLevel() { return xp % XP_PER_LEVEL; }
+  function getXpPercent() { return (getXpInLevel() / XP_PER_LEVEL) * 100; }
+
+
+  function renderXP() {
+    const valEl  = document.getElementById('xpVal');
+    const barEl  = document.getElementById('xpBar');
+    const lvEl   = document.getElementById('lvBadge');
+    if (valEl)  valEl.textContent  = xp;
+    if (barEl)  barEl.style.width  = getXpPercent() + '%';
+    if (lvEl)   lvEl.textContent   = `Niv. ${getLevel()}`;
+  }
+
+  
+  function renderAchievements() {
+    Object.keys(ACHIEVEMENTS).forEach(id => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      if (unlocked.includes(id)) {
+        el.classList.remove('locked');
+        el.classList.add('unlocked');
+      }
+    });
+  }
+
+ 
+  function addXP(amount, label = '') {
+    const prevLv = getLevel();
+    xp += amount;
+    localStorage.setItem(STORAGE_KEY_XP, xp);
+    renderXP();
+
+  
+    showToast(`+${amount} XP ${label ? '– ' + label : ''}! ⭐`);
+
+
+    if (getLevel() > prevLv) {
+      setTimeout(() => showToast(`🎉 Nivel ${getLevel()} atins! Felicitări!`), 1200);
+    }
+  }
+
+  function checkAchievements(weatherData) {
+    let newUnlocks = [];
+    Object.entries(ACHIEVEMENTS).forEach(([id, ach]) => {
+      if (!unlocked.includes(id) && ach.check(searches, weatherData)) {
+        unlocked.push(id);
+        newUnlocks.push({ id, ach });
+      }
+    });
+    if (newUnlocks.length) {
+      localStorage.setItem(STORAGE_KEY_ACH, JSON.stringify(unlocked));
+      renderAchievements();
+      newUnlocks.forEach(({ id, ach }, i) => {
+        setTimeout(() => {
+          addXP(ach.xp, ach.label);
+          const el = document.getElementById(id);
+          if (el) {
+            el.style.transform = 'scale(1.4)';
+            setTimeout(() => el.style.transform = '', 500);
+          }
+        }, i * 1400);
+      });
+    }
+  }
+
+
+  function recordSearch(weatherData) {
+    searches++;
+    localStorage.setItem(STORAGE_KEY_CNT, searches);
+    addXP(XP_PER_SEARCH);
+    setTimeout(() => checkAchievements(weatherData), 600);
+  }
+
+  function showToast(msg, duration = 2800) {
+    const toast = document.getElementById('toast');
+    if (!toast) return;
+    toast.textContent = msg;
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), duration);
+  }
+
+  renderXP();
+  renderAchievements();
+
+  return { recordSearch, showToast };
+
+})();
+</file>
+
+<file path="frontend/index.html">
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>☁️ WeatherBuddy: Prietenul tău meteorologic</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Pacifico&display=swap" rel="stylesheet">
+</head>
+<body class="weather-clear day">
+
+  <div class="bg-scene" id="bgScene">
+    <!-- Sun -->
+    <div class="sun-wrap" id="sunWrap">
+      <div class="sun">
+        <div class="sun-core"></div>
+        <div class="rays" id="rays"></div>
+      </div>
+    </div>
+    
+    <div class="moon-wrap" id="moonWrap">
+      <div class="moon"></div>
+      <div class="stars-field" id="starsField"></div>
+    </div>
+   
+    <div class="clouds-field" id="cloudsField"></div>
+    <div class="rain-field" id="rainField"></div>
+    <div class="snow-field" id="snowField"></div>
+    <div class="thunder-flash" id="thunderFlash"></div>
+  </div>
+
+
+  <div class="app">
+    <header class="header">
+      <div class="logo">
+        <span class="logo-emoji">🌤️</span>
+        <span class="logo-name">WeatherBuddy</span>
+      </div>
+      <div class="xp-widget">
+        <span class="xp-stars">⭐</span>
+        <span class="xp-val" id="xpVal">0</span>
+        <span class="xp-label">XP</span>
+        <div class="xp-track"><div class="xp-bar" id="xpBar"></div></div>
+        <div class="lv-badge" id="lvBadge">Niv. 1</div>
+      </div>
+    </header>
+
+    <div class="body">
+      <aside class="sidebar">
+        <div class="card char-card">
+          <h2 class="card-title">🧍 Prietenul tău</h2>
+          <div class="customize">
+            <div class="cust-row">
+              <label>Nume</label>
+              <input id="charName" type="text" value="Alex" maxlength="12" placeholder="Numele tău..."/>
+            </div>
+            <div class="cust-row">
+              <label>Sex</label>
+              <div class="pill-group">
+                <button class="pill active" id="btnM" onclick="setGender('m')">👦 Băiat</button>
+                <button class="pill" id="btnF" onclick="setGender('f')">👧 Fată</button>
+              </div>
+            </div>
+            <div class="cust-row">
+              <label>Piele</label>
+              <div class="swatch-row">
+                <button class="swatch active" style="background:#FFDBB4" onclick="setSkin('light')" title="Deschis"></button>
+                <button class="swatch" style="background:#C68642" onclick="setSkin('medium')" title="Mediu"></button>
+                <button class="swatch" style="background:#5C3317" onclick="setSkin('dark')" title="Închis"></button>
+              </div>
+            </div>
+            <div class="cust-row">
+              <label>Păr</label>
+              <div class="swatch-row">
+                <button class="swatch" style="background:#1C1008" onclick="setHair('black')" title="Negru"></button>
+                <button class="swatch active" style="background:#6B3A2A" onclick="setHair('brown')" title="Maro"></button>
+                <button class="swatch" style="background:#D4A017" onclick="setHair('blonde')" title="Blond"></button>
+                <button class="swatch" style="background:#B22222" onclick="setHair('red')" title="Roșcat"></button>
+                <button class="swatch" style="background:#888" onclick="setHair('gray')" title="Gri"></button>
+              </div>
+            </div>
+          </div>
+
+          <div class="char-stage">
+            <div id="charSvg"></div>
+            <div class="char-shadow"></div>
+          </div>
+          <div class="bubble" id="bubble">
+            <p id="bubbleText">Bună! Caută un oraș și îți spun cu ce să te îmbraci! 😊</p>
+          </div>
+
+          <div class="achievements">
+            <h3>🏆 Realizări</h3>
+            <div class="badge-row" id="badgeRow">
+              <div class="achv locked" id="achv_first" title="Prima căutare">🔍</div>
+              <div class="achv locked" id="achv_five" title="5 orașe căutate">🌍</div>
+              <div class="achv locked" id="achv_rain" title="Verificat ploaia">☂️</div>
+              <div class="achv locked" id="achv_sun" title="Zi însorită găsită">☀️</div>
+              <div class="achv locked" id="achv_night" title="Căutare nocturnă">🌙</div>
+              <div class="achv locked" id="achv_snow" title="Ninsoare descoperită">❄️</div>
+              <div class="achv locked" id="achv_wind" title="Vânt puternic">🌬️</div>
+              <div class="achv locked" id="achv_explorer" title="Explorator: 10 orașe">🗺️</div>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <main class="main">
+        <div class="card search-card">
+          <div class="search-row">
+            <span class="search-pin">📍</span>
+            <input id="cityInput" type="text" placeholder="Caută un oraș din lume... (ex: București, Paris, Tokyo)"
+                   onkeydown="if(event.key==='Enter') searchWeather()"/>
+            <button class="btn-search" onclick="searchWeather()">🔎 Caută</button>
+          </div>
+          <div class="recent-row" id="recentRow">
+            <span class="recent-lbl">🕐 Recente:</span>
+            <div id="chips"></div>
+          </div>
+        </div>
+
+        <div class="unit-row">
+          <button class="unit-btn active" id="unitC" onclick="setUnit('C')">°C Celsius</button>
+          <button class="unit-btn" id="unitF" onclick="setUnit('F')">°F Fahrenheit</button>
+          <button class="unit-btn" id="unitK" onclick="setUnit('K')">K Kelvin</button>
+        </div>
+        <div class="card state-card" id="emptyCard">
+          <div class="state-icon">🌍</div>
+          <p>Caută un oraș pentru a vedea <strong>vremea în timp real</strong><br/>și sfaturile prietenului tău!</p>
+        </div>
+        <div class="card state-card" id="loadCard" style="display:none">
+          <div class="spinner"></div>
+          <p>Se încarcă datele meteorologice...</p>
+        </div>
+        <div class="card state-card" id="errCard" style="display:none">
+          <div class="state-icon">😕</div>
+          <p id="errMsg">Orașul nu a fost găsit.</p>
+        </div>
+        <div id="weatherCard" style="display:none">
+
+          <div class="card city-card">
+            <div class="city-row">
+              <div>
+                <h1 class="city-name" id="cityName">—</h1>
+                <div class="city-sub" id="cityCountry">—</div>
+              </div>
+              <div class="time-box">
+                <div class="time-label">🕐 Ora locală</div>
+                <div class="time-val" id="localTime">—:—</div>
+              </div>
+            </div>
+
+            <div class="weather-hero">
+              <div class="w-icon" id="wIcon">☀️</div>
+              <div class="temp-block">
+                <div class="temp-big" id="tempBig">—</div>
+                <div class="temp-others" id="tempOthers"></div>
+                <div class="w-desc" id="wDesc">—</div>
+              </div>
+            </div>
+
+            <div class="verdict" id="verdict">—</div>
+          </div>
+
+          <div class="details-grid">
+            <div class="card det-card">
+              <span class="det-ico">💧</span>
+              <span class="det-lbl">Umiditate</span>
+              <span class="det-val" id="dHumidity">—</span>
+            </div>
+            <div class="card det-card">
+              <span class="det-ico">💨</span>
+              <span class="det-lbl">Vânt</span>
+              <span class="det-val" id="dWind">—</span>
+            </div>
+            <div class="card det-card">
+              <span class="det-ico">🌡️</span>
+              <span class="det-lbl">Se simte ca</span>
+              <span class="det-val" id="dFeels">—</span>
+            </div>
+            <div class="card det-card">
+              <span class="det-ico">🌅</span>
+              <span class="det-lbl">Răsărit</span>
+              <span class="det-val" id="dSunrise">—</span>
+            </div>
+            <div class="card det-card">
+              <span class="det-ico">🌇</span>
+              <span class="det-lbl">Apus</span>
+              <span class="det-val" id="dSunset">—</span>
+            </div>
+            <div class="card det-card">
+              <span class="det-ico">👁️</span>
+              <span class="det-lbl">Vizibilitate</span>
+              <span class="det-val" id="dVis">—</span>
+            </div>
+          </div>
+
+          <div class="card advice-card" id="adviceCard">
+            <div class="advice-ico" id="advIco">👔</div>
+            <div class="advice-body">
+              <div class="advice-title">Sfatul prietenului tău:</div>
+              <div class="advice-text" id="advText">—</div>
+            </div>
+          </div>
+
+        </div>
+
+      </main>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+  <script src="weather.js"></script>
+  <script src="character.js"></script>
+  <script src="background.js"></script>
+  <script src="gamification.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
+</file>
+
+<file path="frontend/package.json">
+{
+  "name": "weatherbuddy-frontend",
+  "version": "1.0.0",
+  "description": "WeatherBuddy-Frontend-Proiect 11",
+  "main": "app.js",
+  "scripts": {
+    "start": "echo 'Frontend is ready to serve on http://localhost:3000'",
+    "dev": "echo 'Frontend is ready to serve on http://localhost:3000'"
+  },
+  "keywords": ["weather", "game", "frontend"],
+  "author": "Echipa Proiect 11",
+  "license": "ISC",
+  "dependencies": {},
+  "devDependencies": {}
+}
+</file>
+
+<file path="frontend/style.css">
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+
+:root {
+  --ff: 'Nunito', sans-serif;
+  --ff-logo: 'Pacifico', cursive;
+  --r: 24px;
+  --r-sm: 12px;
+  --shadow: 0 15px 50px rgba(0,0,0,.35);
+  --shadow-sm: 0 8px 25px rgba(0,0,0,.25);
+  --ease: cubic-bezier(.34,1.56,.64,1);
+
+  --bg1: #87ceeb; --bg2: #4fc3f7; --bg3: #0288d1;
+  --glass: rgba(255,255,255,.45);
+  --glass-b: rgba(255,255,255,.65);
+  --txt: #fff;
+  --txt2: rgba(255,255,255,1);
+  --accent: #fdd835;
+  --card: rgba(255,255,255,.38);
+  --card-b: rgba(255,255,255,.55);
+}
+
+body.weather-clear.day   { --bg1:#87CEEB; --bg2:#42a8e8; --bg3:#f9a825; --accent:#fdd835; }
+body.weather-clouds.day  { --bg1:#b0bec5; --bg2:#78909c; --bg3:#546e7a; --accent:#eceff1; }
+body.weather-rain.day,
+body.weather-drizzle.day,
+body.weather-thunderstorm.day { --bg1:#4a6fa5; --bg2:#2c4a7c; --bg3:#1a3055; --accent:#90caf9; }
+body.weather-snow.day {
+  --bg1:#def3ff; --bg2:#b3d9f7; --bg3:#7ec8f0;
+  --txt:#0d2b45; --txt2:rgba(13,43,69,1);
+  --accent:#0984e3;
+  --glass:rgba(255,255,255,.6);
+  --card:rgba(255,255,255,.55);
+}
+body.weather-mist.day,
+body.weather-haze.day,
+body.weather-fog.day { --bg1:#c9d6df; --bg2:#9aabb5; --bg3:#78909c; --accent:#cfd8dc; }
+body.night, body.weather-clear.night, body.weather-clouds.night,
+body.weather-rain.night, body.weather-drizzle.night,
+body.weather-thunderstorm.night, body.weather-snow.night {
+  --bg1:#0d1b2a; --bg2:#1b263b; --bg3:#0a1120;
+  --glass:rgba(255,255,255,.28); --glass-b:rgba(255,255,255,.38);
+  --card:rgba(255,255,255,.22); --card-b:rgba(255,255,255,.32);
+  --accent:#a29bfe;
+}
+body {
+  font-family: var(--ff);
+  color: var(--txt);
+  min-height: 100vh;
+  overflow-x: hidden;
+  transition: color .6s;
+  -webkit-font-smoothing: antialiased;
+}
+.bg-scene {
+  position: fixed; inset: 0; z-index: 0;
+  background: linear-gradient(160deg, var(--bg1) 0%, var(--bg2) 55%, var(--bg3) 100%);
+  transition: background 1.4s ease;
+  overflow: hidden;
+}
+.sun-wrap { position:absolute; top:6%; right:9%; display:none; z-index:2; }
+body.weather-clear.day .sun-wrap { display:block; }
+.sun { position:relative; width:110px; height:110px; }
+.sun-core {
+  width:76px; height:76px;
+  background: radial-gradient(circle at 40% 35%, #fff9c4 0%, #fdd835 45%, #f9a825 100%);
+  border-radius:50%; position:absolute; top:17px; left:17px;
+  box-shadow: 0 0 50px #fdd835, 0 0 100px rgba(253,216,53,.55);
+  animation: sunPulse 3.5s ease-in-out infinite;
+}
+@keyframes sunPulse {
+  0%,100%{ box-shadow:0 0 50px #fdd835,0 0 100px rgba(253,216,53,.5); }
+  50%    { box-shadow:0 0 70px #fdd835,0 0 140px rgba(253,216,53,.75); }
+}
+.ray {
+  position:absolute; width:3px; border-radius:2px;
+  background:linear-gradient(to top, rgba(253,216,53,.85), transparent);
+  transform-origin:50% 0%; top:50%; left:calc(50% - 1.5px);
+  animation: rayspin 10s linear infinite;
+}
+@keyframes rayspin { to{ transform: rotate(360deg); } }
+
+.moon-wrap { position:absolute; top:5%; right:8%; display:none; z-index:2; }
+body.night .moon-wrap { display:block; }
+.moon {
+  width:72px; height:72px;
+  background: radial-gradient(circle at 32% 30%, #fffde7, #f0e070 60%, #c8b830);
+  border-radius:50%;
+  box-shadow:0 0 36px rgba(255,235,60,.38), inset -12px -6px 0 rgba(180,160,30,.35);
+  animation: moonGlow 4s ease-in-out infinite;
+}
+@keyframes moonGlow {
+  0%,100%{ box-shadow:0 0 36px rgba(255,235,60,.38); }
+  50%    { box-shadow:0 0 60px rgba(255,235,60,.65); }
+}
+.star { position:absolute; background:#fff; border-radius:50%; animation: twinkle var(--dur,2s) ease-in-out infinite var(--del,0s); }
+@keyframes twinkle{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.15;transform:scale(.4)}}
+
+.cloud { position:absolute; background:rgba(255,255,255,.88); border-radius:60px; animation: drift linear infinite; }
+.cloud::before,.cloud::after{content:'';position:absolute;background:inherit;border-radius:50%;}
+@keyframes drift{ from{transform:translateX(-250px)} to{transform:translateX(calc(100vw + 250px))} }
+
+.drop { position:absolute; width:2px; border-radius:2px; background:linear-gradient(to bottom,transparent,rgba(120,180,255,.85)); animation: dropfall linear infinite; }
+@keyframes dropfall{ to{transform:translateY(110vh) translateX(25px)} }
+
+
+.flake { position:absolute; color:#fff; opacity:.85; animation: snowdrift linear infinite; }
+@keyframes snowdrift{ to{transform:translateY(110vh) rotate(600deg)} }
+
+
+.thunder-flash { position:fixed; inset:0; pointer-events:none; z-index:5; opacity:0; }
+body.weather-thunderstorm .thunder-flash { animation: thunder 6s ease-in-out infinite; }
+@keyframes thunder{0%,92%,95%,100%{opacity:0;background:transparent}93%{opacity:1;background:rgba(255,255,255,.18)}94%{opacity:0}}
+
+.particles { position:fixed; inset:0; pointer-events:none; z-index:0; overflow:hidden; }
+.particle { position:absolute; border-radius:50%; background:rgba(255,255,255,.3); animation:float linear infinite; }
+@keyframes float {
+  0% { transform:translateY(110vh) rotate(0deg); opacity:0; }
+  10% { opacity:1; } 90% { opacity:1; }
+  100% { transform:translateY(-10vh) rotate(360deg); opacity:0; }
+}
+
+
+.app { position:relative; z-index:10; min-height:100vh; display:flex; flex-direction:column; }
+
+
+.header {
+  display:flex; align-items:center; justify-content:space-between;
+  padding: 18px 4%;
+  flex-wrap:wrap; gap:14px;
+  background:rgba(0,0,0,.4);
+  backdrop-filter:blur(22px);
+  border-bottom:2px solid rgba(255,255,255,.35);
+  width:100%;
+  box-shadow: 0 6px 28px rgba(0,0,0,.28);
+}
+.logo { display:flex; align-items:center; gap:12px; }
+.logo-emoji { font-size:36px; }
+.logo-name {
+  font-family:var(--ff-logo);
+  font-size:2.1rem;
+  text-shadow: 2px 3px 14px rgba(0,0,0,.6);
+}
+.xp-widget {
+  display:flex; align-items:center; gap:10px;
+  background:rgba(0,0,0,.42);
+  padding:10px 20px; border-radius:50px;
+  font-weight:800; font-size:1.05rem;
+  box-shadow: 0 4px 18px rgba(0,0,0,.32);
+}
+.xp-stars { font-size:1.3rem; }
+.xp-val { color:var(--accent); font-size:1.15rem; font-weight:900; text-shadow: 0 0 12px rgba(253,216,53,.55); }
+.xp-track { width:120px; height:12px; border-radius:12px; background:rgba(255,255,255,.3); overflow:hidden; }
+.xp-bar { height:100%; width:0%; background:linear-gradient(90deg,#fdd835,#e17055); border-radius:12px; transition:width .9s var(--ease); }
+.lv-badge { background:var(--accent); color:#111; font-weight:900; font-size:.9rem; padding:5px 14px; border-radius:25px; text-shadow:none; }
+
+.body {
+  flex:1; display:grid;
+  grid-template-columns: 35fr 65fr;
+  gap: 36px;
+  padding: 36px 4% 40px;
+  width:100%;
+  align-items:start;
+}
+
+
+.card {
+  background:var(--glass);
+  backdrop-filter: blur(30px);
+  border:2.5px solid var(--glass-b);
+  border-radius:var(--r);
+  padding: 32px;
+  box-shadow:var(--shadow);
+  transition:all .3s ease;
+}
+.card:hover { transform:translateY(-3px); box-shadow:0 22px 65px rgba(0,0,0,.4); }
+
+
+.card-title {
+  font-size: 1.5rem;
+  font-weight:900;
+  text-align:center;
+  margin-bottom:22px;
+  text-shadow: 0 2px 14px rgba(0,0,0,.45);
+  color: var(--txt2);
+}
+
+
+.sidebar { display:flex; flex-direction:column; gap:20px; }
+
+.customize { margin-bottom:0; }
+.cust-row { display:flex; align-items:center; gap:14px; margin-bottom:18px; flex-wrap:wrap; }
+.cust-row label {
+  font-weight:900; font-size:1.15rem; min-width:55px;
+  color:var(--txt2); text-shadow:0 2px 10px rgba(0,0,0,.4);
+}
+.cust-row input {
+  flex:1; min-width:0;
+  background:rgba(255,255,255,.4);
+  border:2.5px solid rgba(255,255,255,.62);
+  color:var(--txt); border-radius:14px;
+  padding:14px 18px;
+  font-family:var(--ff); font-size:1.2rem; font-weight:800;
+  outline:none;
+  box-shadow: 0 4px 18px rgba(0,0,0,.2);
+  transition:all .2s;
+  text-shadow: 0 1px 5px rgba(0,0,0,.22);
+}
+.cust-row input:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(253,216,53,.35), 0 6px 22px rgba(0,0,0,.22); }
+.cust-row input::placeholder { opacity:.75; }
+.pill-group { display:flex; gap:12px; }
+.pill {
+  background:rgba(255,255,255,.3); border:2.5px solid rgba(255,255,255,.48);
+  color:var(--txt); border-radius:25px; padding:13px 26px;
+  font-family:var(--ff); font-size:1.1rem; font-weight:900;
+  cursor:pointer; transition:all .25s;
+  text-shadow:0 2px 8px rgba(0,0,0,.32);
+  box-shadow:0 3px 14px rgba(0,0,0,.2);
+}
+.pill.active { background:var(--accent); border-color:var(--accent); color:#111; text-shadow:none; box-shadow:0 6px 22px rgba(253,216,53,.6); transform:scale(1.06); }
+.pill:hover:not(.active) { background:rgba(255,255,255,.4); transform:translateY(-2px); }
+
+.swatch-row { display:flex; gap:14px; flex-wrap:wrap; justify-content:center; margin-top:4px; }
+.swatch { width:48px; height:48px; border-radius:50%; border:3.5px solid rgba(255,255,255,.52); cursor:pointer; transition:all .25s; box-shadow:0 4px 14px rgba(0,0,0,.3); }
+.swatch:hover { transform:scale(1.22) translateY(-2px); }
+.swatch.active { border-color:#fff; transform:scale(1.32); box-shadow:0 0 0 4px rgba(255,255,255,.48), 0 7px 28px rgba(0,0,0,.42); }
+.char-stage { text-align:center; margin:16px 0 12px; position:relative; }
+.char-svg-wrap {
+  display:block;
+  width: 100%;
+  filter:drop-shadow(0 20px 45px rgba(0,0,0,.55));
+  transition:transform .4s var(--ease);
+  cursor:pointer;
+  transform: translateY(0);
+}
+.char-svg-wrap:hover { transform: translateY(-12px) rotate(2deg); }
+.char-svg-wrap svg {
+  width: 100% !important;
+  height: auto !important;
+  min-height: 320px;
+  display: block;
+}
+.char-shadow { width:80%; height:22px; background:rgba(0,0,0,.32); border-radius:50%; margin:8px auto 0; filter:blur(10px); }
+
+#characterDisplay,
+.character-display {
+  width: 100%;
+  height: 800px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  filter: drop-shadow(0 20px 45px rgba(0,0,0,.55));
+  cursor: pointer;
+  transition: transform .4s var(--ease);
+}
+#characterDisplay:hover,
+.character-display:hover { transform: translateY(-14px) rotate(1deg) scale(1.04); }
+#characterDisplay svg,
+.character-display svg {
+  width: 100%;
+  height: 800px;
+  display: block;
+}
+
+.bubble {
+  background:rgba(255,255,255,.48);
+  border:2.5px solid rgba(255,255,255,.72);
+  border-radius:20px; padding:22px 28px; margin-top:22px;
+  font-size:1.22rem; font-weight:800; line-height:1.75;
+  position:relative; min-height:75px; transition:all .3s;
+  box-shadow:0 6px 26px rgba(0,0,0,.25);
+  text-shadow:0 1px 7px rgba(0,0,0,.25);
+  color:var(--txt2);
+}
+.bubble:hover { background:rgba(255,255,255,.54); transform:translateY(-2px); }
+.bubble::before {
+  content:''; position:absolute; top:-13px; left:50%; transform:translateX(-50%);
+  border:8px solid transparent; border-bottom-color:rgba(255,255,255,.72);
+}
+
+.achievements { margin-top:18px; }
+.achievements h3 {
+  font-size:1.28rem; font-weight:900; margin-bottom:16px;
+  text-shadow:0 2px 12px rgba(0,0,0,.35); text-align:center; color:var(--txt2);
+}
+.badge-row { display:flex; gap:12px; flex-wrap:wrap; justify-content:center; }
+.achv {
+  width:62px; height:62px; border-radius:16px;
+  display:flex; align-items:center; justify-content:center;
+  font-size:32px; border:2.5px solid rgba(255,255,255,.52);
+  background:rgba(255,255,255,.26); cursor:help; transition:all .3s;
+  box-shadow:0 4px 16px rgba(0,0,0,.28);
+}
+.achv.locked { filter:grayscale(1) brightness(.28); opacity:.32; }
+.achv.unlocked {
+  filter:none; opacity:1; border-color:var(--accent);
+  background:rgba(253,216,53,.18);
+  box-shadow:0 0 22px rgba(253,203,110,.88), 0 6px 22px rgba(0,0,0,.32);
+  animation:achievementPulse 2s ease-in-out infinite;
+}
+@keyframes achievementPulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.06)} }
+.achv.unlocked:hover { transform:scale(1.32) rotate(-10deg); box-shadow:0 0 32px rgba(253,203,110,1), 0 9px 32px rgba(0,0,0,.42); }
+
+
+.main { display:flex; flex-direction:column; gap:26px; }
+
+
+.search-card { padding:26px 30px; }
+.search-row {
+  display:flex; align-items:center; gap:12px;
+  background:rgba(255,255,255,.4); border:2.5px solid rgba(255,255,255,.6);
+  border-radius:60px; padding:15px 18px 15px 24px;
+  box-shadow:0 6px 24px rgba(0,0,0,.22); transition:all .3s;
+}
+.search-row:focus-within { border-color:var(--accent); box-shadow:0 0 0 4px rgba(253,216,53,.3), 0 8px 28px rgba(0,0,0,.25); }
+.search-pin { font-size:24px; }
+.search-row input {
+  flex:1; min-width:0; background:transparent; border:none; outline:none;
+  color:var(--txt); font-family:var(--ff); font-size:1.25rem; font-weight:800;
+  text-shadow:0 1px 6px rgba(0,0,0,.22);
+}
+.search-row input::placeholder { opacity:.78; }
+.btn-search {
+  background:var(--accent); color:#111; border:none; border-radius:50px;
+  padding:14px 34px; font-family:var(--ff); font-size:1.1rem; font-weight:900;
+  cursor:pointer; white-space:nowrap; transition:all .3s;
+  box-shadow:0 5px 20px rgba(253,216,53,.58); text-shadow:none;
+}
+.btn-search:hover { transform:scale(1.08) translateY(-2px); box-shadow:0 9px 28px rgba(253,216,53,.72); }
+.btn-search:active { transform:scale(.97); }
+
+.recent-row { display:flex; align-items:center; gap:10px; margin-top:16px; flex-wrap:wrap; }
+.recent-lbl { font-size:1rem; font-weight:900; opacity:.98; white-space:nowrap; text-shadow:0 2px 7px rgba(0,0,0,.28); color:var(--txt2); }
+#chips { display:flex; gap:10px; flex-wrap:wrap; }
+.chip {
+  background:rgba(255,255,255,.36); border:2px solid rgba(255,255,255,.55);
+  color:var(--txt); border-radius:25px; padding:10px 20px;
+  font-size:1rem; font-weight:800; cursor:pointer; font-family:var(--ff);
+  transition:all .25s; box-shadow:0 3px 14px rgba(0,0,0,.2);
+  text-shadow:0 1px 5px rgba(0,0,0,.22);
+}
+.chip:hover { background:rgba(255,255,255,.5); transform:translateY(-3px); box-shadow:0 7px 20px rgba(0,0,0,.26); }
+
+.unit-row { display:flex; gap:14px; }
+.unit-btn {
+  flex:1; background:rgba(255,255,255,.3); border:2.5px solid rgba(255,255,255,.45);
+  color:var(--txt); border-radius:16px; padding:16px 10px;
+  font-family:var(--ff); font-size:1.1rem; font-weight:900; cursor:pointer;
+  transition:all .25s; text-shadow:0 2px 8px rgba(0,0,0,.28);
+  box-shadow:0 3px 14px rgba(0,0,0,.18);
+}
+.unit-btn.active { background:var(--accent); border-color:var(--accent); color:#111; text-shadow:none; box-shadow:0 6px 22px rgba(253,216,53,.58); transform:scale(1.06); }
+.unit-btn:hover:not(.active) { background:rgba(255,255,255,.38); transform:translateY(-2px); }
+
+.state-card { text-align:center; padding:70px 36px; }
+.state-icon { font-size:72px; margin-bottom:20px; }
+.state-card p { font-weight:800; line-height:1.75; opacity:.98; font-size:1.2rem; text-shadow:0 2px 9px rgba(0,0,0,.28); color:var(--txt2); }
+.spinner { width:54px; height:54px; border:5px solid rgba(255,255,255,.38); border-top-color:#fff; border-radius:50%; animation:spin .75s linear infinite; margin:0 auto 22px; }
+@keyframes spin{ to{transform:rotate(360deg)} }
+
+.city-card { margin-bottom:0; }
+.city-row { display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:16px; margin-bottom:18px; }
+.city-name { font-family:var(--ff-logo); font-size:3.2rem; line-height:1.15; text-shadow:0 4px 20px rgba(0,0,0,.42); color:var(--txt2); }
+.city-sub { font-size:1.2rem; font-weight:800; opacity:.95; margin-top:6px; text-shadow:0 2px 9px rgba(0,0,0,.3); color:var(--txt2); }
+.time-box { text-align:right; }
+.time-label { font-size:.92rem; font-weight:900; opacity:.92; text-transform:uppercase; letter-spacing:.08em; text-shadow:0 2px 7px rgba(0,0,0,.28); color:var(--txt2); }
+.time-val { font-size:2.4rem; font-weight:900; text-shadow:0 3px 16px rgba(0,0,0,.35); color:var(--txt2); }
+
+.weather-hero { display:flex; align-items:center; gap:32px; margin-bottom:22px; }
+.w-icon { font-size:120px; line-height:1; filter:drop-shadow(0 10px 34px rgba(0,0,0,.4)); }
+.temp-big { font-size:5.8rem; font-weight:900; line-height:1; text-shadow:0 5px 24px rgba(0,0,0,.38); color:var(--txt2); }
+.temp-others { font-size:1.12rem; font-weight:800; opacity:.95; margin-top:6px; text-shadow:0 2px 8px rgba(0,0,0,.25); color:var(--txt2); }
+.w-desc { font-size:1.45rem; font-weight:900; margin-top:8px; text-transform:capitalize; text-shadow:0 3px 14px rgba(0,0,0,.3); color:var(--txt2); }
+.verdict {
+  background:rgba(255,255,255,.34); border:2.5px solid rgba(255,255,255,.52);
+  border-radius:18px; padding:20px 28px; font-size:1.22rem; font-weight:900;
+  text-align:center; line-height:1.7; box-shadow:0 6px 22px rgba(0,0,0,.22);
+  text-shadow:0 2px 9px rgba(0,0,0,.25); color:var(--txt2);
+}
+
+.details-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:18px; }
+.det-card {
+  display:flex; flex-direction:column; align-items:center; gap:10px;
+  text-align:center; padding:30px 18px; cursor:default; transition:all .3s;
+  border-radius:18px; background:rgba(255,255,255,.2);
+  border:1.5px solid rgba(255,255,255,.35);
+  box-shadow:0 4px 18px rgba(0,0,0,.2);
+}
+.det-card:hover { transform:translateY(-5px) scale(1.03); background:rgba(255,255,255,.28); }
+.det-ico { font-size:40px; }
+.det-lbl { font-size:.92rem; font-weight:900; opacity:.95; text-transform:uppercase; letter-spacing:.06em; text-shadow:0 2px 7px rgba(0,0,0,.28); color:var(--txt2); }
+.det-val { font-size:1.5rem; font-weight:900; text-shadow:0 3px 12px rgba(0,0,0,.28); color:var(--txt2); }
+
+.advice-card { display:flex; align-items:center; gap:24px; padding:26px 30px; }
+.advice-ico { font-size:68px; flex-shrink:0; }
+.advice-title { font-size:1rem; font-weight:900; opacity:.92; text-transform:uppercase; letter-spacing:.08em; margin-bottom:8px; text-shadow:0 2px 7px rgba(0,0,0,.28); color:var(--txt2); }
+.advice-text { font-size:1.32rem; font-weight:800; line-height:1.7; text-shadow:0 2px 9px rgba(0,0,0,.25); color:var(--txt2); }
+
+.toast {
+  position:fixed; bottom:32px; left:50%;
+  transform:translateX(-50%) translateY(120px);
+  background:rgba(20,20,30,.97); color:#fff;
+  padding:16px 34px; border-radius:60px;
+  font-weight:900; font-family:var(--ff); font-size:1.1rem;
+  z-index:999; box-shadow:0 12px 44px rgba(0,0,0,.65);
+  transition:transform .4s var(--ease); pointer-events:none;
+  backdrop-filter:blur(18px); border:2px solid rgba(255,255,255,.28);
+}
+.toast.show { transform:translateX(-50%) translateY(0); }
+
+.forecast-section {
+  background:var(--glass); backdrop-filter:blur(28px);
+  border:2.5px solid var(--glass-b); border-radius:var(--r);
+  padding:28px; box-shadow:var(--shadow);
+}
+.forecast-title { font-family:var(--ff-logo); font-size:1.45rem; color:var(--txt2); margin-bottom:18px; text-shadow:0 3px 12px rgba(0,0,0,.35); }
+.forecast-grid { display:grid; grid-template-columns:repeat(5,1fr); gap:14px; }
+.forecast-card {
+  background:rgba(255,255,255,.2); border:1.5px solid rgba(255,255,255,.35);
+  border-radius:16px; padding:16px 10px; text-align:center;
+  display:flex; flex-direction:column; align-items:center; gap:8px;
+  transition:transform .2s; box-shadow:0 4px 14px rgba(0,0,0,.2);
+}
+.forecast-card:hover { transform:translateY(-5px); }
+.forecast-day { font-size:.82rem; font-weight:900; color:var(--txt2); text-transform:uppercase; text-shadow:0 2px 6px rgba(0,0,0,.28); }
+.forecast-icon { font-size:2rem; }
+.forecast-temp { font-size:1.15rem; font-weight:900; color:var(--txt2); text-shadow:0 2px 8px rgba(0,0,0,.28); }
+.forecast-desc { font-size:.74rem; font-weight:800; color:var(--txt2); opacity:.9; }
+@media(max-width:1100px){
+  .body{ grid-template-columns:35fr 65fr; gap:26px; }
+  .char-svg-wrap{ transform:scale(3.1); margin:82px 0 76px; }
+  .city-name{ font-size:2.7rem; } .temp-big{ font-size:5rem; } .w-icon{ font-size:105px; }
+}
+@media(max-width:850px){
+  .body{ grid-template-columns:1fr; padding:24px; }
+  .char-svg-wrap{ transform:scale(2.8); margin:74px 0 68px; }
+  .char-svg-wrap:hover{ transform:scale(2.95) translateY(-10px); }
+  .city-name{ font-size:2.3rem; } .temp-big{ font-size:4.4rem; } .w-icon{ font-size:95px; }
+  .details-grid{ grid-template-columns:repeat(2,1fr); } .weather-hero{ gap:22px; }
+}
+@media(max-width:600px){
+  .city-name{ font-size:2rem; } .temp-big{ font-size:3.7rem; } .w-icon{ font-size:80px; }
+  .char-svg-wrap{ transform:scale(2.4); margin:64px 0; }
+  .logo-name{ font-size:1.75rem; } .search-row input{ font-size:1.1rem; }
+}
+</file>
+
+<file path="README.MD">
+# 🌤️ WeatherBuddy – Prietenul tău meteorologic
+### Proiect 11 – Aplicație Web Meteo
+
+---
+
+## 📁 Structura proiectului
+
+```
+WeatherBuddy/
+├── index.html              ← Pagina principală HTML5
+├── css/
+│   └── style.css           ← Stiluri CSS3 + teme dinamice
+├── js/
+│   ├── weather.js          ← Modul procesare date API (SEPARAT de UI!)
+│   ├── character.js        ← Modul personaj SVG customizabil
+│   ├── background.js       ← Modul animații fundal
+│   ├── gamification.js     ← Modul XP, nivele, realizări
+│   └── app.js              ← Controller principal UI
+└── README.md
+```
+
+---
+
+## 🚀 Cum rulezi aplicația
+
+### Varianta simplă (fără server):
+1. Deschide `index.html` direct în browser (dublu-click)
+2. Aplicația funcționează imediat!
+
+### Varianta cu server local (VS Code):
+1. Instalează extensia **Live Server** în VS Code
+2. Click dreapta pe `index.html` → `Open with Live Server`
+3. Se deschide automat la `http://localhost:5500`
+
+### Varianta Node.js (port 5000):
+```bash
+npm install -g serve
+serve . -p 5000
+# Deschide http://localhost:5000
+```
+
+---
+
+## 🔑 Cheie API
+
+Cheia API OpenWeatherMap este configurată în `js/weather.js`:
+```javascript
+const API_KEY = '8565b1a3ac0548dc03fc6ae7ca7f199d';
+```
+
+---
+
+## Funcționalități implementate
+
+### Cerințe de bază:
+- [x] Caută orice oraș din lume
+- [x] Afișează temperatura curentă
+- [x] Temperatură în °C, °F și Kelvin (comutare liberă)
+- [x] Procesare meteo **separată** de afișare (`weather.js` vs `app.js`)
+- [x] Răsărit și apus de soare
+- [x] Umiditate, vizibilitate, presiune
+- [x] Descriere vreme în română
+- [x] Direcție vânt în cuvinte (Nord, Sud-Vest, etc.)
+- [x] Verdict zi ("Zi splendidă!", "Zi de pătură și ceai!")
+- [x] Sfat haină / umbrelă
+
+### Cerințe Node.js:
+- [x] Selectare unitate temperatură (C/F/K)
+- [x] Ora locală a orașului căutat
+- [x] Ultimele 5 orașe (localStorage) cu selectare rapidă
+- [x] Interfață dinamică după vreme:
+  - ☀️ Senin → fundal albastru deschis + soare animat
+  - ⛅ Nori → fundal gri + nori animați care driftează
+  - 🌧️ Ploaie → fundal albastru închis + picuri animate
+  - ❄️ Ninsoare → fundal alb-albastru + fulgi animați
+  - ⚡ Furtună → fundal foarte închis + flash de fulger
+  - 🌙 Noapte → fundal întunecat + stele animate
+
+### Provocări:
+- [x] Personaj SVG **customizabil**: sex, culoare piele, culoare păr
+- [x] Personaj **se îmbracă** după vreme (vara lejer, iarna haină+fular)
+- [x] Bulă de dialog cu sfaturi personalizate + numele utilizatorului
+- [x] Gamification: XP, nivele, 8 realizări deblocabile
+- [x] Animații fundal contextuale (soare cu raze, picuri de ploaie, fulgi de nea, stele)
+- [x] Toast notifications pentru XP și realizări
+
+---
+
+## 🏗️ Arhitectură (Separare responsabilități)
+
+```
+┌─────────────────────────────────────────────────────┐
+│                    index.html                       │
+│              (structură HTML5 + layout)             │
+└─────────────────┬───────────────────────────────────┘
+                  │
+        ┌─────────▼─────────┐
+        │      app.js       │  ← Controller: leagă totul
+        │  (UI Controller)  │
+        └──┬──────┬────┬────┘
+           │      │    │
+    ┌──────▼──┐ ┌─▼──┐ ┌─▼──────────┐ ┌──────────────┐
+    │weather.js│ │char│ │background.js│ │gamification.js│
+    │API fetch │ │acter│ │Animații    │ │XP, Nivele    │
+    │+procesare│ │.js  │ │fundal      │ │Realizări     │
+    └──────────┘ └────┘ └────────────┘ └──────────────┘
+         │
+    ┌────▼─────────────────┐
+    │ OpenWeatherMap API   │
+    │ api.openweathermap   │
+    └──────────────────────┘
+```
+
+---
+
+## 🎮 Sistem Gamification
+
+| Realizare | Condiție | XP |
+|-----------|----------|----|
+| 🔍 Prima căutare | 1 căutare | 20 XP |
+| 🌍 5 orașe diferite | 5 căutări | 50 XP |
+| ☂️ Prins ploaia | Vreme ploioasă | 30 XP |
+| ☀️ Zi splendidă | Senin + >20°C | 30 XP |
+| 🌙 Bufniță de noapte | Căutare noaptea | 25 XP |
+| ❄️ Prima ninsoare | Snow | 40 XP |
+| 🌬️ Vântul urlă | Vânt >10 m/s | 25 XP |
+| 🗺️ Mare explorator | 10 căutări | 80 XP |
+
+Fiecare căutare aduce **+15 XP**. La 100 XP → nivel nou!
+## 👥 Contribuții echipă
+- **Student 1** – `weather.js`, `app.js` (logică API + controller)
+- **Student 2** – `character.js`, `background.js`, `css/style.css` (UI + animații)
+
+## 🌐 Deployment
+
+- **Vercel**: drag & drop folderul pe vercel.com
+- **Render**: conectează repo GitHub → Static Site
+- **GitHub Pages**: push pe branch `main` → Settings → Pages
+</file>
+
+</files>
